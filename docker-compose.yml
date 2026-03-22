@@ -1,0 +1,35 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  miner:
+    build: ./miner
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      STREAM_NAME: ${STREAM_NAME:-mining_events}
+
+  visualizer:
+    build: ./visualizer
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      STREAM_NAME: ${STREAM_NAME:-mining_events}
+      TOP_N_DEFAULT: ${TOP_N_DEFAULT:-10}
+      UI_REFRESH_SECONDS: ${UI_REFRESH_SECONDS:-3}
+    ports:
+      - "8501:8501"
