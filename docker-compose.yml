@@ -19,6 +19,8 @@ services:
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       STREAM_NAME: ${STREAM_NAME:-mining_events}
+      MAX_WORKERS: ${MAX_WORKERS:-4}
+      CLONE_DIR: ${CLONE_DIR:-/tmp/miner_clones}
 
   visualizer:
     build: ./visualizer

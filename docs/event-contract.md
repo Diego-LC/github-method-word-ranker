@@ -8,6 +8,8 @@
 - `GITHUB_TOKEN`
 - `TOP_N_DEFAULT`
 - `UI_REFRESH_SECONDS`
+- `MAX_WORKERS`
+- `CLONE_DIR`
 
 ## Stream
 
@@ -38,6 +40,9 @@ Campos requeridos:
 - `repo_stars`
 - `python_files`
 - `java_files`
+- `total_functions`
+- `total_words`
+- `top_word`
 - `status`
 - `emitted_at`
 
@@ -45,6 +50,7 @@ Campos requeridos:
 
 - `word_ranking`: sorted set de Redis con conteos globales por palabra.
 - `mining_stats`: hash de Redis con totales y metadatos del ultimo repositorio procesado.
+- `repo_details`: hash de Redis donde cada campo es `repo_full_name` y el valor es un JSON con las estadisticas del repositorio (stars, archivos, funciones, palabras, top_word, status).
 
 ## Regla del contrato
 
