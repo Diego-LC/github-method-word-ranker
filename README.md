@@ -1,127 +1,119 @@
 # GitHub Method Word Ranker
 
-Herramienta que mina repositorios Python y Java desde GitHub, extrae palabras desde nombres de funciones y metodos, y visualiza el ranking en tiempo casi real.
+Herramienta que mina repositorios Python y Java hiper-populares desde GitHub de forma local y altamente paralelizada. Extrae metodologías y patrones semánticos mediante el nombrado de funciones, procesándolos para un ranking en tiempo casi real.
 
 ## Arquitectura
 
-```
-┌──────────┐     Redis Streams     ┌──────────────┐
-│  Miner   │ ──── word_batch ────► │  Consumer    │
-│ (Python) │ ── repo_processed ──► │ (background) │
-└──────────┘                       └──────┬───────┘
-      │                                    │
-  GitHub API                       Sorted Set / Hash
-                                          │
-                                   ┌──────▼───────┐
-                                   │  Streamlit   │
-                                   │  Dashboard   │
-                                   └──────────────┘
+```mermaid
+graph LR
+    Miner[Miner<br>Shallow Clone + Multiprocessing] -->|word_batch<br>repo_processed| Stream[(Redis Streams)]
+    Stream --> Consumer[Background Consumer]
+    Consumer -->|Agrega Datos| Agg[(Redis Sets / Hashes)]
+    Agg --> App[Streamlit Dashboard<br>+ Pandas Tablas]
 ```
 
-- **Miner**: recorre repositorios de GitHub en orden descendente de stars, parsea archivos `.py` y `.java`, divide nombres de funciones/metodos en palabras y publica eventos en Redis Streams.
-- **Consumer**: proceso en segundo plano que consume eventos del stream y actualiza datos agregados en Redis (sorted set + hash).
-- **Dashboard**: interfaz Streamlit que lee los datos agregados de Redis y se refresca automaticamente.
+- **Miner**: recorre los repos más populares de GitHub por estrellas. Los descarga usando clones *shallow* (`git --depth 1`) superando las limitaciones REST, parsea paralelamente el código (`ast` y `javalang`), fragmenta variables en componentes funcionales (`lower_snake_case`) y publica los conteos al intermediario.
+- **Consumer**: worker independiente (Consumer Group) que consume continuamente el Stream inyectando métricas complejas en Redis.
+- **Dashboard**: web UI enriquecida implementada con la reactividad de `Streamlit`, visualizando analíticas globales y detalles iterando repositorios vía dataframes en Pandas.
 
 ## Requisitos
 
 - [Docker](https://docs.docker.com/get-docker/) y Docker Compose
-- (Opcional) Un [token de acceso personal de GitHub](https://github.com/settings/tokens) para evitar rate limits
+- (Opcional) Un [token de acceso personal de GitHub](https://github.com/settings/tokens) (Ayudará en la búsqueda de los repositorios a investigar)
 
-## Ejecucion
+## Ejecución
 
-1. Clonar el repositorio y entrar a la carpeta del proyecto:
+1. Clonar este proyecto a tu equipo:
    ```bash
    cd github-method-word-ranker
    ```
 
-2. (Opcional) Configurar el token de GitHub:
+2. (Opcional) Configurar ambiente (Especialmente tokens de API):
    ```bash
    cp .env.example .env
    # Editar .env y agregar tu GITHUB_TOKEN
    ```
 
-3. Ejecutar con un solo comando:
+3. Construir y levantar todo el Pipeline Computacional:
    ```bash
    docker compose up --build
    ```
 
-4. Abrir el dashboard en el navegador:
+4. Abrir tu navegador en el centro de control generado:
    ```
    http://localhost:8501
    ```
 
-5. Para detener el sistema:
+5. Detención de contenedores interactiva:
    ```bash
    docker compose down
    ```
 
-## Estructura del repositorio
+## Estructura de Directorios
 
 ```
 github-method-word-ranker/
-├── docker-compose.yml          # Orquestacion de contenedores
-├── .env.example                # Variables de entorno de ejemplo
+├── docker-compose.yml          # Topología Dockerizada interconectada
+├── .env.example                # Variables de entorno
 ├── docs/
-│   ├── architecture.md         # Arquitectura y flujo de datos
-│   └── event-contract.md       # Contrato de eventos y claves Redis
+│   ├── architecture.md         # Documentación en Mermaid de Topología
+│   └── event-contract.md       # Esquemas de payloads y claves en la REDIS DB
 ├── miner/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── src/miner/
-│   │   ├── main.py             # Entry point del miner
-│   │   ├── config.py           # Configuracion desde env vars
-│   │   ├── github_client.py    # Cliente GitHub REST API
+│   │   ├── main.py             # Pool Workers + Orchestrator
+│   │   ├── config.py           # Ingestor configs `MAX_WORKERS` / `CLONE_DIR`
+│   │   ├── github_client.py    # Github REST Client limit-aware
+│   │   ├── repo_cloner.py      # Gestor local Shallow git clone y file discovery
 │   │   ├── parsers/
-│   │   │   ├── python_parser.py  # Extraccion via ast (stdlib)
-│   │   │   └── java_parser.py    # Extraccion via javalang
-│   │   ├── splitter.py         # Division de nombres en palabras
-│   │   ├── range_scheduler.py  # Generacion de rangos de stars
-│   │   └── publisher.py        # Publicacion en Redis Stream
-│   └── tests/                  # 40 tests unitarios
+│   │   │   ├── python_parser.py  # Python `ast` syntax parser
+│   │   │   └── java_parser.py    # `javalang` JVM parser
+│   │   ├── splitter.py         # Acrónimos, CamelCase normalizer
+│   │   ├── range_scheduler.py  # Fragmentador paginación recursiva estrellas
+│   │   └── publisher.py        # Stream dispatcher
+│   └── tests/                  # 48 tests unitarios (pytest) aislando flujos
 └── visualizer/
     ├── Dockerfile
-    ├── entrypoint.sh           # Lanza consumer + streamlit
+    ├── entrypoint.sh           # Foreground (Streamlit) + Background (Consumer)
     ├── requirements.txt
     ├── src/visualizer/
-    │   ├── app.py              # Dashboard Streamlit
-    │   ├── charts.py           # Graficos Plotly
-    │   ├── consumer.py         # Consumidor continuo de eventos
-    │   ├── redis_store.py      # Lectura/escritura de agregados
-    │   └── settings.py         # Configuracion del visualizer
-    └── tests/                  # 4 tests unitarios
+    │   ├── app.py              # Front (Streamlit) Panel Configs y Pandas Df.
+    │   ├── charts.py           # Plotly Interactive graphs builder
+    │   ├── consumer.py         # Extractor Reactivo persistente
+    │   ├── redis_store.py      # Abstracciones para lecturas optimizadas zsets/hashes
+    │   └── settings.py
+    └── tests/                  # 5 tests unitarios mockeados.
 ```
 
-## Decisiones de diseño
+## Decisiones Críticas en el Diseño Computacional
 
-| Decision | Justificacion |
+| Elección | Explicación Técnica |
 | --- | --- |
-| **Python + ast** para parsear Python | Parser oficial del lenguaje, cubre el 100% de la sintaxis sin dependencias externas |
-| **javalang** para parsear Java | Parser AST completo para Java, mas robusto que regex para declaraciones de metodos |
-| **Redis Streams** como broker | Modelo productor-consumidor ligero, persistente y con consumer groups |
-| **Sorted set** para ranking | Operaciones O(log N) para incrementos, O(N) para top-N. Persiste entre reinicios |
-| **Streamlit** para la UI | Dashboard interactivo con auto-refresh y graficos Plotly con minimo codigo |
-| **Rangos de stars** en vez de paginacion simple | La API de GitHub limita a 1000 resultados por query. Dividir en rangos permite cubrir mas repositorios |
-| **Filtrar dunder methods** | `__init__`, `__str__`, etc. son convenciones del lenguaje, no decisiones del programador |
+| **Clonado Shallow v/s API REST** | Las llamadas unitarias por la API asfixiaban el límite de Github en segundos. Utilizar el binario `git clone --depth 1` nos concede descargar millones de líneas de código bajo una única transacción de red global por repo y 0 consumo en el Token API. |
+| **Multiprocessing en vez de Threading** | En Python, el `GIL` bloquea a los threads del verdadero procesamiento CPU en Paralelo. El parseo de los lenguajes es un problema *CPU-bound*, por ende instanciar Pools de subprocesos aislados acelera exponencialmente las métricas procesando simultáneo en cada core de la máquina huésped. |
+| **Pandas en el Dashboard** | Simplifica inmensamente el pre-procesamiento, sanitización de campos y rendereo robusto ordenable de la **Tabla de Repositorios Analizados**, listando estatus en tiempo vivo sin depender del render normal. |
+| **Redis Streams + Sorted Sets** | Aislar la ingesta intensiva con Streams permite escalar a decenas de Miners. Mientras tanto, las lecturas pesadas (UI) consultan Sorted Sets `O(log(N))` sin frenar las transacciones activas. |
 
-## Variables de entorno
+## Ajustes del Entorno (`.env`)
 
-| Variable | Default | Descripcion |
+| Variable | Inicial | Propósito |
 | --- | --- | --- |
-| `GITHUB_TOKEN` | (vacio) | Token de acceso personal de GitHub |
-| `REDIS_HOST` | `redis` | Host de Redis |
-| `REDIS_PORT` | `6379` | Puerto de Redis |
-| `STREAM_NAME` | `mining_events` | Nombre del stream de Redis |
-| `TOP_N_DEFAULT` | `10` | Top-N por defecto en el dashboard |
-| `UI_REFRESH_SECONDS` | `3` | Intervalo de auto-refresh del dashboard |
+| `MAX_WORKERS` | `4` | Cantidad de sub-procesos Python para el Multiprocessing del Miner. |
+| `CLONE_DIR` | `/tmp/miner_clones` | Localización en disco efímero de los clones shallow. |
+| `TOP_N_DEFAULT` | `10` | Ajuste inicial del ranking de barras de UI |
+| `UI_REFRESH_SECONDS`| `3` | Intervalo temporal de regeneración gráfica y tabular en FrontEnd. |
 
-## Tests
+## Desarrollo y Tests
+
+El sistema cubre rigurosamente sus responsabilidades con 53 validaciones que protegen regresiones futuras.
 
 ```bash
-# Miner (requiere: pip install requests redis javalang pytest)
+# Entorno Miner Pruebas (Instalando pytest, requests, redis, javalang)
 cd miner
 PYTHONPATH=src pytest tests/ -v
 
-# Visualizer (requiere: pip install streamlit redis plotly pytest)
+# Entorno Visualizer Pruebas (Instalando pytest, streamlit, plotly, pandas)
 cd visualizer
 PYTHONPATH=src pytest tests/ -v
 ```
