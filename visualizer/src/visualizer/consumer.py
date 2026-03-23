@@ -1,9 +1,9 @@
 """Consumidor continuo de eventos desde Redis Streams.
 
 Lee eventos del stream de mineria y actualiza los datos
-agregados en Redis (sorted set + hash). Se ejecuta como
-un proceso separado dentro del contenedor del visualizer
-(lanzado por entrypoint.sh).
+agregados en Redis (sorted set + hash + repo details).
+Se ejecuta como un proceso separado dentro del contenedor
+del visualizer (lanzado por entrypoint.sh).
 """
 
 from __future__ import annotations
@@ -72,17 +72,42 @@ def _process_event(store: RedisStore, event: dict[str, str]) -> None:
         )
 
     elif event_type == "repo_processed":
+        repo_full_name = event.get("repo_full_name", "unknown")
+        repo_stars = int(event.get("repo_stars", "0"))
+        python_files = int(event.get("python_files", "0"))
+        java_files = int(event.get("java_files", "0"))
+        total_functions = int(event.get("total_functions", "0"))
+        total_words = int(event.get("total_words", "0"))
+        top_word = event.get("top_word", "")
+        status = event.get("status", "ok")
+
+        # Actualizar estadisticas globales.
         store.update_stats(
-            repo_full_name=event.get("repo_full_name", "unknown"),
-            repo_stars=int(event.get("repo_stars", "0")),
-            python_files=int(event.get("python_files", "0")),
-            java_files=int(event.get("java_files", "0")),
+            repo_full_name=repo_full_name,
+            repo_stars=repo_stars,
+            python_files=python_files,
+            java_files=java_files,
         )
+
+        # Guardar detalle del repositorio.
+        store.save_repo_detail(
+            repo_full_name=repo_full_name,
+            repo_stars=repo_stars,
+            python_files=python_files,
+            java_files=java_files,
+            total_functions=total_functions,
+            total_words=total_words,
+            top_word=top_word,
+            status=status,
+        )
+
         logger.info(
-            "Repositorio procesado: %s (%s stars, status=%s).",
-            event.get("repo_full_name", "?"),
-            event.get("repo_stars", "?"),
-            event.get("status", "?"),
+            "Repositorio procesado: %s (%d stars, funcs=%d, words=%d, status=%s).",
+            repo_full_name,
+            repo_stars,
+            total_functions,
+            total_words,
+            status,
         )
 
     else:

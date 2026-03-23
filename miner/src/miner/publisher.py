@@ -71,6 +71,9 @@ class EventPublisher:
         repo_stars: int,
         python_files: int,
         java_files: int,
+        total_functions: int = 0,
+        total_words: int = 0,
+        top_word: str = "",
         status: str = "ok",
     ) -> None:
         """Publica un evento repo_processed al terminar un repositorio."""
@@ -80,14 +83,19 @@ class EventPublisher:
             "repo_stars": str(repo_stars),
             "python_files": str(python_files),
             "java_files": str(java_files),
+            "total_functions": str(total_functions),
+            "total_words": str(total_words),
+            "top_word": top_word,
             "status": status,
             "emitted_at": datetime.now(timezone.utc).isoformat(),
         }
         self._redis.xadd(self._stream, entry)
         logger.info(
-            "Publicado repo_processed: %s (py=%d, java=%d, status=%s)",
+            "Publicado repo_processed: %s (py=%d, java=%d, funcs=%d, words=%d, status=%s)",
             repo_full_name,
             python_files,
             java_files,
+            total_functions,
+            total_words,
             status,
         )

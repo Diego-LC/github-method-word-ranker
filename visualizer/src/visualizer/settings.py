@@ -27,6 +27,7 @@ class Settings:
     # Claves de Redis para datos agregados.
     word_ranking_key: str = "word_ranking"
     mining_stats_key: str = "mining_stats"
+    repo_details_key: str = "repo_details"
 
 
 def load_settings() -> Settings:

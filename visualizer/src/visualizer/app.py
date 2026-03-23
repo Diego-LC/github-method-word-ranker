@@ -1,9 +1,10 @@
 """Interfaz de Streamlit para el ranking de palabras.
 
-Lee datos agregados desde Redis (sorted set y hash) y renderiza:
+Lee datos agregados desde Redis (sorted set, hash y repo details) y renderiza:
 - Metricas clave (total repos, total palabras, palabra #1).
 - Grafico de barras horizontal con el top-N de palabras.
 - Tabla con los datos del ranking.
+- Tabla de repositorios analizados con estadisticas.
 
 Se refresca automaticamente cada UI_REFRESH_SECONDS segundos.
 """
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import time
 
+import pandas as pd
 import streamlit as st
 
 from visualizer.charts import create_ranking_bar_chart
@@ -76,7 +78,7 @@ with col4:
 
 st.divider()
 
-# -- Grafico y tabla --
+# -- Grafico y tabla de palabras --
 if top_words:
     words = [w for w, _ in top_words]
     counts = [c for _, c in top_words]
@@ -85,8 +87,8 @@ if top_words:
     fig = create_ranking_bar_chart(words, counts, top_n)
     st.plotly_chart(fig, use_container_width=True)
 
-    # Tabla de datos.
-    with st.expander("📋 Ver tabla de datos", expanded=False):
+    # Tabla de ranking.
+    with st.expander("📋 Ver tabla de ranking", expanded=False):
         table_data = [
             {"Posicion": i + 1, "Palabra": w, "Frecuencia": int(c)}
             for i, (w, c) in enumerate(top_words)
@@ -97,6 +99,44 @@ else:
         "⏳ Esperando datos del miner... "
         "El ranking se actualizara automaticamente cuando haya datos disponibles."
     )
+
+# -- Tabla de repositorios analizados --
+st.divider()
+st.subheader("📦 Repositorios analizados")
+
+repos = store.get_all_repos()
+if repos:
+    df = pd.DataFrame(repos)
+
+    # Renombrar y ordenar columnas.
+    column_map = {
+        "repo_full_name": "Repositorio",
+        "stars": "⭐ Stars",
+        "python_files": "🐍 Python",
+        "java_files": "☕ Java",
+        "total_functions": "📝 Funciones",
+        "total_words": "🔤 Palabras",
+        "top_word": "🏆 Top palabra",
+        "status": "Estado",
+    }
+    display_cols = [c for c in column_map if c in df.columns]
+    df = df[display_cols].rename(columns=column_map)
+
+    # Reemplazar status con iconos.
+    if "Estado" in df.columns:
+        df["Estado"] = df["Estado"].apply(
+            lambda s: "✅" if s == "ok" else "❌"
+        )
+
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.caption(f"Total: {len(repos)} repositorios ordenados por estrellas")
+else:
+    st.info("⏳ No hay repositorios procesados aun.")
 
 # -- Info del ultimo repo --
 last_repo = stats.get("last_repo", "")
