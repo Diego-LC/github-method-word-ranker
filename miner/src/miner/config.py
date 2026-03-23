@@ -25,6 +25,10 @@ class Settings:
     # Traversal
     min_stars: int = int(os.environ.get("MIN_STARS", "10"))
     repos_per_page: int = int(os.environ.get("REPOS_PER_PAGE", "30"))
+
+    # Clonado y paralelismo
+    clone_dir: str = os.environ.get("CLONE_DIR", "/tmp/miner_clones")
+    max_workers: int = int(os.environ.get("MAX_WORKERS", "4"))
     max_file_size_bytes: int = int(
         os.environ.get("MAX_FILE_SIZE_BYTES", str(512 * 1024))
     )

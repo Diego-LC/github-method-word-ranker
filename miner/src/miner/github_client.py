@@ -1,16 +1,14 @@
 """Cliente HTTP para la API de GitHub.
 
-Provee acceso a:
-- Busqueda de repositorios ordenados por stars (descendente).
-- Arbol recursivo de archivos de un repositorio.
-- Contenido raw de archivos individuales.
+Provee acceso a la busqueda de repositorios ordenados por stars.
+La descarga de archivos individuales ya no es necesaria gracias
+al clonado de repositorios (repo_cloner.py).
 
 Incluye manejo de rate limiting con backoff exponencial.
 """
 
 from __future__ import annotations
 
-import base64
 import logging
 import time
 from typing import Any
@@ -66,55 +64,6 @@ class GitHubClient:
         }
         data = self._get(f"{self.API_BASE}/search/repositories", params=params)
         return data.get("items", [])
-
-    # ------------------------------------------------------------------
-    # Arbol de archivos
-    # ------------------------------------------------------------------
-
-    def get_file_tree(
-        self, owner: str, repo: str, default_branch: str = "main"
-    ) -> list[dict[str, Any]]:
-        """Obtiene el arbol recursivo de archivos del repositorio.
-
-        Intenta con la rama proporcionada y hace fallback a 'master'.
-        """
-        url = f"{self.API_BASE}/repos/{owner}/{repo}/git/trees/{default_branch}"
-        try:
-            data = self._get(url, params={"recursive": "1"})
-            return data.get("tree", [])
-        except requests.HTTPError as exc:
-            if exc.response is not None and exc.response.status_code == 404:
-                # Intentar con 'master' como fallback.
-                if default_branch != "master":
-                    return self.get_file_tree(owner, repo, "master")
-            raise
-
-    # ------------------------------------------------------------------
-    # Contenido de archivos
-    # ------------------------------------------------------------------
-
-    def get_file_content(self, owner: str, repo: str, path: str) -> str | None:
-        """Descarga el contenido de un archivo via la API de contenidos.
-
-        Retorna el contenido decodificado como string, o None si falla.
-        """
-        url = f"{self.API_BASE}/repos/{owner}/{repo}/contents/{path}"
-        try:
-            data = self._get(url)
-        except requests.HTTPError:
-            logger.debug("No se pudo obtener %s/%s/%s", owner, repo, path)
-            return None
-
-        encoding = data.get("encoding", "")
-        content = data.get("content", "")
-
-        if encoding == "base64" and content:
-            try:
-                return base64.b64decode(content).decode("utf-8", errors="replace")
-            except Exception:
-                return None
-
-        return None
 
     # ------------------------------------------------------------------
     # Request con retry
